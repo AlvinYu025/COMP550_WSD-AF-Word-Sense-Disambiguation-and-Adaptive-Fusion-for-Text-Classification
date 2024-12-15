@@ -1,1 +1,1 @@
-# COMP550_WSD_for_Sentiment-Analysis
+# COMP550_WSD-for-Sentiment-Analysis
