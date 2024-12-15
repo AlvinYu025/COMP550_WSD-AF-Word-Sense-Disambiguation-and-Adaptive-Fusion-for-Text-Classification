@@ -5,7 +5,7 @@ from disambiguation import disambiguate
 from sentiment_analysis import train_and_evaluate_model
 
 # Set parameters
-DATA_PATH = "dataset/sentiment140.csv"
+DATA_PATH = "dataset/sentiment140/sentiment140.csv"
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 MAX_LENGTH = 128
