@@ -16,7 +16,11 @@ def load_dataset(path):
     df.columns = ['target', 'id', 'date', 'flag', 'user', 'text']
     df['sentiment'] = df['target'].map({0: 'negative', 2: 'neutral', 4: 'positive'})
     df = df[['text', 'sentiment']]
-    return df
+
+    # Sample 10% of data for each sentiment class
+    df_sampled = df.groupby('sentiment', group_keys=False).apply(lambda x: x.sample(frac=0.001, random_state=42)).reset_index(drop=True)
+    
+    return df_sampled
 
 if __name__ == "__main__":
     # Load dataset
@@ -26,6 +30,11 @@ if __name__ == "__main__":
     train_texts, test_texts, train_labels, test_labels = train_test_split(
         df['text'], df['sentiment'], test_size=TEST_SIZE, random_state=RANDOM_STATE
     )
+    
+    # Map string labels to integers AFTER splitting
+    label_map = {"negative": 0, "neutral": 1, "positive": 2}
+    train_labels = [label_map[label] for label in train_labels]
+    test_labels = [label_map[label] for label in test_labels]
 
     # Perform Named Entity Recognition (NER) to extract target words
     target_data = perform_ner(train_texts)
