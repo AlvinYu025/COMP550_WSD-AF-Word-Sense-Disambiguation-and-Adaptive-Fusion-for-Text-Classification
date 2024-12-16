@@ -1,103 +1,177 @@
-import numpy as np
-from sklearn.metrics import f1_score, accuracy_score, precision_recall_fscore_support
-from torch.nn.functional import softmax
-from transformers import BertTokenizer, BertForSequenceClassification, Trainer, TrainingArguments
 import torch
+from transformers import BertTokenizer, BertForSequenceClassification, BertModel
+from torch.utils.data import DataLoader, Dataset
 
-# Prepare dataset for PyTorch
-class SentimentDataset(torch.utils.data.Dataset):
+from disambiguation import split_text_based_on_conflict
+
+
+class AlphaCalculator(torch.nn.Module):
+    def __init__(self, context_dim, conflict_dim):
+        """
+        Alpha Calculator dynamically computes alpha based on context and conflict features.
+        """
+        super(AlphaCalculator, self).__init__()
+        self.context_layer = torch.nn.Linear(context_dim, 1)  # Context importance weight
+        self.conflict_layer = torch.nn.Linear(conflict_dim, 1)  # Conflict importance weight
+        self.sigmoid = torch.nn.Sigmoid()
+
+    def forward(self, context_vector, part1_vector, part2_vector):
+        """
+        Compute alpha dynamically based on context and conflict features.
+        """
+        conflict_vector = part1_vector - part2_vector
+        alpha = self.sigmoid(self.context_layer(context_vector) + self.conflict_layer(conflict_vector))
+        return alpha.squeeze()
+
+class SentimentDataset(Dataset):
     def __init__(self, encodings, labels):
         self.encodings = encodings
         self.labels = labels
 
     def __getitem__(self, idx):
-        # Include the labels directly in the returned dictionary
-        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
-        item['labels'] = torch.tensor(self.labels[idx])  # Add labels here
-        return item
+        return {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}, self.labels[idx]
 
     def __len__(self):
         return len(self.labels)
 
-# Train and evaluate the sentiment analysis model
-def train_and_evaluate_model(train_texts, train_labels, test_texts, test_labels, max_length):
-    # Load tokenizer and model
-    tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    model = BertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=3)
+def compute_sentiment_vector(text, sentiment_model, tokenizer):
+    """
+    Compute the sentiment vector for a given text using the sentiment model.
+    """
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+    with torch.no_grad():
+        outputs = sentiment_model(**inputs)
+    return torch.softmax(outputs.logits, dim=1).squeeze()
 
-    # Tokenize texts
+def compute_context_vector(text, bert_model, tokenizer):
+    """
+    Compute the context vector for a given text using BERT's [CLS] token output.
+    """
+    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
+    with torch.no_grad():
+        outputs = bert_model(**inputs)
+    return outputs.pooler_output.squeeze()
+
+def fine_tune_model(sentiment_model, tokenizer, train_texts, train_labels, max_length, epochs=10, batch_size=8):
+    """
+    Train a sentiment analysis model using BERT.
+    """
+    train_texts = list(map(str, train_texts))
+
+    # Tokenize data
     train_encodings = tokenizer(list(train_texts), truncation=True, padding=True, max_length=max_length)
-    test_encodings = tokenizer(list(test_texts), truncation=True, padding=True, max_length=max_length)
-
-    # Prepare datasets
     train_dataset = SentimentDataset(train_encodings, train_labels)
-    test_dataset = SentimentDataset(test_encodings, test_labels)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    # Training arguments
-    training_args = TrainingArguments(
-        output_dir='./results',
-        num_train_epochs=4,
-        per_device_train_batch_size=12,
-        per_device_eval_batch_size=12,
-        eval_strategy="epoch",
-        save_total_limit=2,
-        learning_rate=3e-5,
-        weight_decay=0.01,
-        logging_dir='./logs',
-    )
+    # Training setup
+    optimizer = torch.optim.AdamW(sentiment_model.parameters(), lr=2e-5)
+    criterion = torch.nn.CrossEntropyLoss()
 
-    # Trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset,
-        eval_dataset=test_dataset,
-        compute_metrics=compute_metrics,
-    )
+    sentiment_model.train()
+    for epoch in range(epochs):
+        total_loss = 0
+        for batch in train_loader:
+            inputs, labels = batch
+            input_ids = inputs["input_ids"]
+            attention_mask = inputs["attention_mask"]
 
-    # Train the model
-    trainer.train()
+            # Forward pass
+            outputs = sentiment_model(input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+            total_loss += loss.item()
 
-    # Evaluate the model
-    trainer.evaluate()
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-    # Test sample predictions
-    inputs = tokenizer(test_texts.tolist(), truncation=True, padding=True, return_tensors="pt")
-    outputs = model(**inputs)
-    predictions = torch.argmax(outputs.logits, dim=-1).tolist()
+        print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(train_loader):.4f}")
 
-    # Calculate Accuracy and F1 Scores
-    true_labels = test_labels
-    accuracy = accuracy_score(true_labels, predictions)
-    f1 = f1_score(true_labels, predictions, average='weighted')  # Use 'weighted' for multi-class
+    return sentiment_model, tokenizer
 
-    # Print the metrics
-    print(f"Accuracy: {accuracy}")
-    print(f"F1 Score: {f1}")
+def train_alpha_calculator(sentiment_model, train_texts, train_labels, tokenizer, confilict_dim=3, max_length=3, epochs=20, batch_size=8):
+    """
+    Train the Alpha Calculator using processed texts.
+    """
+    alpha_calculator = AlphaCalculator(context_dim=768, conflict_dim=confilict_dim)
 
-def compute_metrics(eval_pred):
-    logits, labels = eval_pred
-    
-    # Get predicted class indices (same as before)
-    preds = np.argmax(logits, axis=-1)
-    
-    # Calculate accuracy
-    accuracy = accuracy_score(labels, preds)
-    
-    # Calculate precision, recall, and F1-score
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='weighted')
-    
-    # Convert logits to probabilities using softmax (for confidence score)
-    probs = softmax(torch.tensor(logits), dim=-1)
-    
-    # Get the confidence scores (probability of the predicted class)
-    confidence_scores = probs.max(dim=-1).values.numpy()  # Max probability corresponds to predicted class
-    
-    # Optionally: Return the confidence scores for inspection, but generally metrics are returned
-    return {
-        'accuracy': accuracy,
-        'precision': precision,
-        'recall': recall,
-        'f1': f1,
-        'confidence_scores': confidence_scores.tolist()  # Returning the confidence scores
-    }
+    # Tokenize data
+    train_encodings = tokenizer(list(train_texts), truncation=True, padding=True, max_length=max_length)
+    train_dataset = SentimentDataset(train_encodings, train_labels)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    # Training setup
+    optimizer = torch.optim.AdamW(alpha_calculator.parameters(), lr=1e-4)
+    criterion = torch.nn.CrossEntropyLoss()
+
+    alpha_calculator.train()
+    for epoch in range(epochs):
+        total_loss = 0
+        for batch in train_loader:
+            inputs, labels = batch
+            input_ids = inputs["input_ids"]
+            attention_mask = inputs["attention_mask"]
+
+            # Step 1: Extract context vector
+            with torch.no_grad():
+                context_vector = compute_context_vector(input_ids, sentiment_model, tokenizer)
+
+            # Step 2: Split sentence into Part 1 and Part 2
+            part1_text, part2_text = split_text_based_on_conflict(input_ids, tokenizer)
+
+            # Step 3: Generate Part 1 and Part 2 sentiment vectors
+            part1_vector = compute_sentiment_vector(part1_text, sentiment_model, tokenizer)
+            part2_vector = compute_sentiment_vector(part2_text, sentiment_model, tokenizer) if part2_text else torch.zeros_like(part1_vector)
+
+            # Step 4: Compute alpha
+            alpha = alpha_calculator(context_vector, part1_vector, part2_vector)
+
+            # Step 5: Compute mixed output
+            mixed_output = alpha * part1_vector + (1 - alpha) * part2_vector
+
+            # Step 6: Compute loss using hard labels
+            loss = criterion(mixed_output.unsqueeze(0), labels)
+            total_loss += loss.item()
+
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(train_loader):.4f}")
+
+    return alpha_calculator
+
+
+def evaluate_model(processed_texts, test_labels, sentiment_model, tokenizer, alpha_calculator):
+    """
+    Evaluate the sentiment model and Alpha Calculator.
+    """
+    sentiment_model.eval()
+    alpha_calculator.eval()
+    bert_model = BertModel.from_pretrained('bert-base-uncased')
+
+    predictions = []
+    for text in processed_texts:
+        # Split text into Part 1 and Part 2
+        parts = text.split("[SEP]")
+        part1, part2 = parts[0], parts[1] if len(parts) > 1 else ""
+
+        # Compute sentiment vectors
+        part1_vector = compute_sentiment_vector(part1, sentiment_model, tokenizer)
+        part2_vector = compute_sentiment_vector(part2, sentiment_model, tokenizer) if part2 else torch.zeros_like(part1_vector)
+
+        # Compute context vector for Part 1
+        context_vector = compute_context_vector(part1, bert_model, tokenizer)
+
+        # Compute alpha and fused output
+        alpha = alpha_calculator(context_vector, part1_vector, part2_vector)
+        fused_vector = alpha * part1_vector + (1 - alpha) * part2_vector
+
+        # Predict label
+        predictions.append(torch.argmax(fused_vector).item())
+
+    # Evaluate predictions
+    accuracy = sum(1 for p, t in zip(predictions, test_labels) if p == t) / len(test_labels)
+    print(f"Accuracy: {accuracy * 100:.2f}%")
+    return accuracy
