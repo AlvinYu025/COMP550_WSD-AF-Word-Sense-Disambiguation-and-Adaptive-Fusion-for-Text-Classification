@@ -8,8 +8,8 @@ from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 def load_dataset(data_path=None, train_path=None, test_path=None):
     if train_path and test_path:
-        train_df = pd.read_csv(train_path, encoding='latin1')
-        test_df = pd.read_csv(test_path, encoding='latin1')
+        train_df = pd.read_csv(train_path, encoding='latin1').head(1000)
+        test_df = pd.read_csv(test_path, encoding='latin1').head(200)
     elif data_path:
         df = pd.read_csv(data_path)
         train_df, test_df = train_test_split(
@@ -41,6 +41,9 @@ if __name__ == "__main__":
     model_name = "bert-base-uncased"  # Example: BERT model
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
+    # Step 1: Load dataset
+    print(f"Step 1: Load dataset {dataset_name}")
+
     if TRAIN_PATH and TEST_PATH:
         train_df, test_df = load_dataset(train_path=TRAIN_PATH, test_path=TEST_PATH)
     elif DATA_PATH:
@@ -62,21 +65,24 @@ if __name__ == "__main__":
     print(f"Number of test examples: {len(test_texts)}")
     print(f"Example train text: [{train_texts.iloc[0]}] with sentiment label: {train_labels.iloc[0]}")
 
-    # exit()
-
-    # Step 2: Fine-tune the pre-trained model
+    # # Step 2: Fine-tune the pre-trained model
+    print("Step 2: Fine-tune the pre-trained model")
     sentiment_model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=3)
     sentiment_model = fine_tune_model(sentiment_model, tokenizer, train_texts, train_labels, max_length=MAX_LENGTH, epochs=10, batch_size=32)
 
     # Step 3: Train Alpha Calculator
-    alpha_calculator = train_alpha_calculator(sentiment_model, train_texts, train_labels, tokenizer, confilict_dim=3, max_length=MAX_LENGTH, epochs=20, batch_size=32)
+    print("Step 3: Train Alpha Calculator")
+    alpha_calculator = train_alpha_calculator(sentiment_model, train_texts, train_labels, tokenizer, confilict_dim=3, max_length=MAX_LENGTH, epochs=10, batch_size=32)
 
     # Step 4: Ambiguous Target Word Recognition
+    print("Step 4: Ambiguous Target Word Recognition")
     target_data = perform_ner(train_texts)
 
+    print("Step 5: Split sentences based on conflicts and disambiguate words")
     # Step 5: Split sentences based on conflicts and disambiguate words
     processed_texts = process_sentences(target_data)
 
+    print("Step 6: Evaluate the model")
     # Step 6: Evaluate the model
     evaluate_model(
         processed_texts, test_labels, sentiment_model, tokenizer, alpha_calculator

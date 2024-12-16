@@ -35,9 +35,28 @@
   Validate performance on cross-domain datasets to measure adaptability.
 
   report:
-  - Abstract
+  - Abstract (Fengfei)
   - Introduction
-  - results of experiment: Measure accuracy and F1 scores for sentiment predictions
-  - Compare results across baseline models (BERT without fine-tune)
+  - Related work (short)
+  - Motivation (Fengfei)
+    - Motivation 1: Current Model cannot identify complex syntax, such as implicit negation: "I pretend to be happy." -> This is due to lack of disambiguation. -> Thus we add disambiguation to improve the Sentiment Analysis/Review (classification) performance.
+    - Motivation 2: Current Model cannot handle noisy sentences with self-conflicting meanings in one sentence: "I love this poor, stubborn, and ugly man." -> We propose a divide-and-conquer method with dynamic weighting to solve this problem. (alpha calculator)
+  - Experiment Setup
+    - What model used.
+      - BERT + FT BERT + RoBERTa + FT RoBERTa (FT: Fine-tuned)
+    - What dataset used.
+      - Sentiment Analysis Dataset + Tweet + Product Review + Hospital Review (?)
+    - Evaluation metrics used. (ACC + F1)
+    - Parameter setting (fine-tune epoches/learning rate).
+  - Experiment Results
+    - Refer to Picture.
+  - Discussion
+    - Compare results across baseline models (w/ or w/o fine-tune)
+    - Analyze the effect of WSD
+    - Analyze the effect of DaC (Divide-and-Conquer)
+    - Analyze the effect of WSDaC (WSD + DaC)
   - Limitations
+    - Advanced splitting method can be explored. (Ours is based on sentiment word only.)
+    - Dataset limitation: We haven't test long sentences with alternating sentiments, sometimes indicated by time. The noisy dataset is limited for your testing.
+    - Extra cost of training alpha calculator.
   - Work extension

@@ -1,4 +1,6 @@
+import nltk
 from nltk import pos_tag, word_tokenize
+nltk.download('averaged_perceptron_tagger_eng')
 
 def perform_ner(sentences):
     """

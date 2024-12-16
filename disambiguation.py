@@ -1,9 +1,10 @@
 import torch
 import nltk
-nltk.download('opinion_lexicon')
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from nltk.corpus import opinion_lexicon, wordnet
 from nltk.tokenize import word_tokenize
+
+nltk.download('opinion_lexicon')
 
 # Load lexicon and models
 positive_words = set(opinion_lexicon.positive())
@@ -118,13 +119,19 @@ def split_text_based_on_conflict(input_ids, tokenizer):
     """
     Split text into Part 1 and Part 2 based on the maximum conflict point.
     Args:
-        input_ids (Tensor): Input IDs from the tokenizer.
+        input_ids (Union[Tensor, str]): Input IDs from the tokenizer or decoded text.
         tokenizer: The tokenizer to decode input IDs back to text.
     Returns:
         tuple: (Part 1 text, Part 2 text).
     """
-    # Decode input_ids back to text
-    sentence = tokenizer.decode(input_ids.squeeze(), skip_special_tokens=True)
+    # If input is a tensor, decode it to text
+    if isinstance(input_ids, torch.Tensor):
+        sentence = tokenizer.decode(input_ids.squeeze(), skip_special_tokens=True)
+    elif isinstance(input_ids, str):
+        sentence = input_ids  # Already decoded text
+    else:
+        raise ValueError("input_ids must be a Tensor or a string")
+
     words = sentence.split()
 
     # Step 1: Detect conflicting words
@@ -159,9 +166,11 @@ def process_sentences(target_data):
         target_words = item["entities"]
 
         # Step 1: Detect conflicting words
+        print("Step 1: Detect conflicting words")
         conflicting_words = find_conflicting_words(sentence)
 
         # Step 2: Split sentence if there is a conflict
+        print("Step 2: Split sentence if there is a conflict")
         words = sentence.split()
         if conflicting_words["is_conflict"]:
             # Compute sentiment vectors and find best split
@@ -170,9 +179,13 @@ def process_sentences(target_data):
             part1, part2 = " ".join(words[:split_index]), " ".join(words[split_index:])
         else:
             # No conflict, keep the sentence as Part 1
+            print("Conflicting words exist.")
             part1, part2 = sentence, ""
+        print(f"Part 1: {part1}")
+        print(f"Part 2: {part2}")
 
         # Step 3: Disambiguate target words in each part
+        print("Disambiguate target words in each part")
         for word in target_words:
             if word in part1:
                 part1 = part1.replace(word, f"{word} ({disambiguate_word(word, part1)})")

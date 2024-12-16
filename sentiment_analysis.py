@@ -1,5 +1,5 @@
 import torch
-from transformers import BertTokenizer, BertForSequenceClassification, BertModel
+from transformers import BertModel
 from torch.utils.data import DataLoader, Dataset
 
 from disambiguation import split_text_based_on_conflict
@@ -47,14 +47,15 @@ def compute_context_vector(text, bert_model, tokenizer):
     """
     Compute the context vector for a given text using BERT's [CLS] token output.
     """
+    # Tokenize text
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
     with torch.no_grad():
-        outputs = bert_model(**inputs)
-    return outputs.pooler_output.squeeze()
+        outputs = bert_model(**inputs)  # Use BertModel instead of BertForSequenceClassification
+    return outputs.pooler_output.squeeze()  # Extract [CLS] token representation
 
-def fine_tune_model(sentiment_model, tokenizer, train_texts, train_labels, max_length, epochs=10, batch_size=8):
+def fine_tune_model(sentiment_model, tokenizer, train_texts, train_labels, max_length, epochs=10, batch_size=8, save_path="sentiment_model.pt"):
     """
-    Train a sentiment analysis model using BERT.
+    Train and save a fine-tuned sentiment analysis model using BERT.
     """
     train_texts = list(map(str, train_texts))
 
@@ -69,6 +70,7 @@ def fine_tune_model(sentiment_model, tokenizer, train_texts, train_labels, max_l
 
     sentiment_model.train()
     for epoch in range(epochs):
+        print(f"Current epoch {epoch} out of {epochs}")
         total_loss = 0
         for batch in train_loader:
             inputs, labels = batch
@@ -87,12 +89,22 @@ def fine_tune_model(sentiment_model, tokenizer, train_texts, train_labels, max_l
 
         print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(train_loader):.4f}")
 
+    # Save the fine-tuned model
+    torch.save(sentiment_model.state_dict(), save_path)
+    print(f"Sentiment model weights saved to {save_path}")
+
     return sentiment_model, tokenizer
 
-def train_alpha_calculator(sentiment_model, train_texts, train_labels, tokenizer, confilict_dim=3, max_length=3, epochs=20, batch_size=8):
+
+def train_alpha_calculator(
+    sentiment_model, train_texts, train_labels, tokenizer, confilict_dim=3, max_length=128, epochs=20, batch_size=8, save_path="alpha_calculator_10epoch_sentiment.pt"
+):
     """
-    Train the Alpha Calculator using processed texts.
+    Train the Alpha Calculator using processed texts and save the model weights.
     """
+    train_texts = list(map(str, train_texts))
+
+    # Initialize Alpha Calculator
     alpha_calculator = AlphaCalculator(context_dim=768, conflict_dim=confilict_dim)
 
     # Tokenize data
@@ -105,32 +117,44 @@ def train_alpha_calculator(sentiment_model, train_texts, train_labels, tokenizer
     criterion = torch.nn.CrossEntropyLoss()
 
     alpha_calculator.train()
+    total_batches = len(train_loader)  # Get total number of batches
     for epoch in range(epochs):
         total_loss = 0
-        for batch in train_loader:
+        print(f"Epoch {epoch + 1}/{epochs} started...")
+        for batch_idx, batch in enumerate(train_loader):
             inputs, labels = batch
             input_ids = inputs["input_ids"]
             attention_mask = inputs["attention_mask"]
 
-            # Step 1: Extract context vector
-            with torch.no_grad():
-                context_vector = compute_context_vector(input_ids, sentiment_model, tokenizer)
+            batch_mixed_outputs = []  # Store mixed outputs for the batch
 
-            # Step 2: Split sentence into Part 1 and Part 2
-            part1_text, part2_text = split_text_based_on_conflict(input_ids, tokenizer)
+            # Step 1: Process each sentence in the batch
+            for i in range(len(input_ids)):
+                with torch.no_grad():
+                    sentence = tokenizer.decode(input_ids[i], skip_special_tokens=True)
+                    context_vector = compute_context_vector(sentence, sentiment_model, tokenizer)
 
-            # Step 3: Generate Part 1 and Part 2 sentiment vectors
-            part1_vector = compute_sentiment_vector(part1_text, sentiment_model, tokenizer)
-            part2_vector = compute_sentiment_vector(part2_text, sentiment_model, tokenizer) if part2_text else torch.zeros_like(part1_vector)
+                # Step 2: Split sentence into Part 1 and Part 2
+                part1_text, part2_text = split_text_based_on_conflict(sentence, tokenizer)
 
-            # Step 4: Compute alpha
-            alpha = alpha_calculator(context_vector, part1_vector, part2_vector)
+                # Step 3: Generate Part 1 and Part 2 sentiment vectors
+                part1_vector = compute_sentiment_vector(part1_text, sentiment_model, tokenizer)
+                part2_vector = compute_sentiment_vector(part2_text, sentiment_model, tokenizer) if part2_text else torch.zeros_like(part1_vector)
+                print(part1_vector)
+                print(part2_vector)
 
-            # Step 5: Compute mixed output
-            mixed_output = alpha * part1_vector + (1 - alpha) * part2_vector
+                # Step 4: Compute alpha
+                alpha = alpha_calculator(context_vector, part1_vector, part2_vector)
+
+                # Step 5: Compute mixed output for the sentence
+                mixed_output = alpha * part1_vector + (1 - alpha) * part2_vector
+                batch_mixed_outputs.append(mixed_output)
+
+            # Convert mixed outputs into a batch tensor
+            batch_mixed_outputs = torch.stack(batch_mixed_outputs)  # Shape: (batch_size, num_classes)
 
             # Step 6: Compute loss using hard labels
-            loss = criterion(mixed_output.unsqueeze(0), labels)
+            loss = criterion(batch_mixed_outputs, labels)
             total_loss += loss.item()
 
             # Backward pass and optimization
@@ -138,9 +162,18 @@ def train_alpha_calculator(sentiment_model, train_texts, train_labels, tokenizer
             loss.backward()
             optimizer.step()
 
-        print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(train_loader):.4f}")
+            # Print batch progress
+            print(f"Batch {batch_idx + 1}/{total_batches}: Loss = {loss.item():.4f}")
+
+        # Print epoch summary
+        print(f"Epoch {epoch + 1}/{epochs} completed. Average Loss = {total_loss / total_batches:.4f}")
+
+    # Save the trained AlphaCalculator weights
+    torch.save(alpha_calculator.state_dict(), save_path)
+    print(f"Alpha Calculator weights saved to {save_path}")
 
     return alpha_calculator
+
 
 
 def evaluate_model(processed_texts, test_labels, sentiment_model, tokenizer, alpha_calculator):
