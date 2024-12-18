@@ -1,27 +1,259 @@
 import torch
-from transformers import BertModel
-from torch.utils.data import DataLoader, Dataset
-
-from disambiguation import split_text_based_on_conflict
-
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from torch.utils.data import Dataset, DataLoader
 
 class AlphaCalculator(torch.nn.Module):
-    def __init__(self, context_dim, conflict_dim):
-        """
-        Alpha Calculator dynamically computes alpha based on context and conflict features.
-        """
+    def __init__(self, vector_dim):
         super(AlphaCalculator, self).__init__()
-        self.context_layer = torch.nn.Linear(context_dim, 1)  # Context importance weight
-        self.conflict_layer = torch.nn.Linear(conflict_dim, 1)  # Conflict importance weight
-        self.sigmoid = torch.nn.Sigmoid()
+        self.weight_net = torch.nn.Sequential(
+            torch.nn.Linear(vector_dim * 2, 64),  # Combine global and context
+            torch.nn.ReLU(),
+            torch.nn.Linear(64, vector_dim * 2),  # Output weights for each dimension
+            torch.nn.Softmax(dim=-1)  # Normalize weights across dimensions
+        )
 
-    def forward(self, context_vector, part1_vector, part2_vector):
+    def forward(self, global_vector, context_vector):
+        # Concatenate vectors
+        combined_input = torch.cat([global_vector, context_vector], dim=-1)
+
+        # Compute weights
+        weights = self.weight_net(combined_input)  # Shape: [batch_size, vector_dim * 2]
+        w_global, w_context = weights[:, :global_vector.size(1)], weights[:, global_vector.size(1):]
+
+        # Compute fused vector
+        fused_vector = w_global * global_vector + w_context * context_vector
+        return fused_vector
+
+
+def fine_tune_model(sentiment_model, tokenizer, train_texts, train_labels, val_texts, val_labels,
+                    max_length, epochs=10, batch_size=8, save_path="FT_RoBERTa_10epoch.pt"):
+    """
+    Train and save a fine-tuned sentiment analysis model using BERT/RoBERTa.
+    Includes validation after each epoch to monitor performance.
+    """
+    # Convert train and val texts to strings
+    train_texts = list(map(str, train_texts))
+    val_texts = list(map(str, val_texts))
+
+    # Prepare training data
+    train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=max_length)
+    train_dataset = SentimentDataset(train_encodings, train_labels)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    # Prepare validation data
+    val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=max_length)
+    val_dataset = SentimentDataset(val_encodings, val_labels)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+    # Define optimizer and loss criterion
+    optimizer = torch.optim.AdamW(sentiment_model.parameters(), lr=2e-5)
+    criterion = torch.nn.CrossEntropyLoss()
+
+    best_val_loss = float("inf")  # Track the best validation loss
+    best_model_path = save_path
+
+    sentiment_model.train()
+    for epoch in range(epochs):
+        print(f"Epoch {epoch + 1}/{epochs}")
+        total_loss = 0
+
+        # Training loop
+        for batch in train_loader:
+            inputs, labels = batch
+            input_ids = inputs["input_ids"]
+            attention_mask = inputs["attention_mask"]
+
+            outputs = sentiment_model(input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+
+            total_loss += loss.item()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        print(f"Training Loss: {total_loss / len(train_loader):.4f}")
+
+        # Validation loop
+        sentiment_model.eval()
+        val_loss = 0
+        with torch.no_grad():
+            for batch in val_loader:
+                inputs, labels = batch
+                input_ids = inputs["input_ids"]
+                attention_mask = inputs["attention_mask"]
+
+                outputs = sentiment_model(input_ids, attention_mask=attention_mask, labels=labels)
+                loss = outputs.loss
+                val_loss += loss.item()
+
+        val_loss /= len(val_loader)
+        print(f"Validation Loss: {val_loss:.4f}")
+
+        # Save the best model
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(sentiment_model.state_dict(), best_model_path)
+            print(f"New best model saved to {best_model_path}")
+
+        sentiment_model.train()
+
+    print(f"Training completed. Best model saved at {best_model_path} with Validation Loss: {best_val_loss:.4f}")
+    return sentiment_model
+
+
+def train_alpha_calculator(
+    train_data, val_data, epochs=100, batch_size=8, save_path="best_alpha_calculator_weights.pt"
+):
+    """
+    Train the Alpha Calculator using processed data with validation.
+    Args:
+        train_data (list): Processed training sentences with global and context vectors.
+        val_data (list): Processed validation sentences with global and context vectors.
+        epochs (int): Number of training epochs.
+        batch_size (int): Batch size for training.
+        save_path (str): Path to save the best-performing model weights.
+
+    Returns:
+        AlphaCalculator: The trained Alpha Calculator model.
+    """
+    vector_dim = 3  # Sentiment vector dimension
+    alpha_calculator = AlphaCalculator(vector_dim=vector_dim)
+
+    optimizer = torch.optim.AdamW(alpha_calculator.parameters(), lr=2e-4)
+    criterion = torch.nn.CrossEntropyLoss()
+
+    best_val_loss = float("inf")
+
+    def process_batch(batch):
         """
-        Compute alpha dynamically based on context and conflict features.
+        Helper function to process a batch of data into tensors.
         """
-        conflict_vector = part1_vector - part2_vector
-        alpha = self.sigmoid(self.context_layer(context_vector) + self.conflict_layer(conflict_vector))
-        return alpha.squeeze()
+        global_vectors = torch.stack([item["global_vector"] for item in batch])
+        context_vectors = torch.stack([item["context_vector"] for item in batch])
+        labels = torch.tensor([item["label"] for item in batch], dtype=torch.long)
+        return global_vectors, context_vectors, labels
+
+    for epoch in range(epochs):
+        total_train_loss = 0
+        print(f"Epoch {epoch + 1}/{epochs}")
+
+        # Training Loop
+        alpha_calculator.train()
+        for i in range(0, len(train_data), batch_size):
+            batch = train_data[i:i + batch_size]
+
+            global_vectors, context_vectors, labels = process_batch(batch)
+
+            fused_vectors = alpha_calculator(global_vectors, context_vectors)
+            loss = criterion(fused_vectors, labels)
+            total_train_loss += loss.item()
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+        avg_train_loss = total_train_loss / (len(train_data) // batch_size)
+        print(f"Training Loss: {avg_train_loss:.4f}")
+
+        # Validation Loop
+        alpha_calculator.eval()
+        total_val_loss = 0
+        all_preds = []
+        all_labels = []
+        with torch.no_grad():
+            for i in range(0, len(val_data), batch_size):
+                batch = val_data[i:i + batch_size]
+
+                global_vectors, context_vectors, labels = process_batch(batch)
+
+                fused_vectors = alpha_calculator(global_vectors, context_vectors)
+                loss = criterion(fused_vectors, labels)
+                total_val_loss += loss.item()
+
+                # Collect predictions and true labels for accuracy calculation
+                preds = torch.argmax(fused_vectors, dim=1).tolist()
+                all_preds.extend(preds)
+                all_labels.extend(labels.tolist())
+
+        avg_val_loss = total_val_loss / (len(val_data) // batch_size)
+        val_acc = accuracy_score(all_labels, all_preds)
+        print(f"Validation Loss: {avg_val_loss:.4f}, Validation Accuracy: {val_acc * 100:.2f}%")
+
+        # Save the best model weights
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            torch.save(alpha_calculator.state_dict(), save_path)
+            print(f"New best model weights saved to {save_path}")
+
+    print(f"Training completed. Best Validation Loss: {best_val_loss:.4f}")
+    return alpha_calculator
+
+
+def evaluate_model(mode, test_texts, test_labels, sentiment_model, alpha_calculator=None):
+    """
+    Dynamically evaluate the model based on the presence of an Alpha Calculator.
+    Compute multiple evaluation metrics including Accuracy, Precision, Recall, and F1-Score.
+
+    Args:
+        test_texts (list): List of test sentences.
+        test_labels (list): List of true sentiment labels for the test set.
+        sentiment_model: The fine-tuned BERT/RoBERTa sentiment model.
+        tokenizer: Tokenizer used for the sentiment model.
+        alpha_calculator (optional): Alpha Calculator model for fusing sentiment vectors.
+
+    Returns:
+        dict: Dictionary containing evaluation metrics (Accuracy, Precision, Recall, F1-Score).
+    """
+    sentiment_model.eval()  # Set the sentiment model to evaluation mode
+    if alpha_calculator:
+        alpha_calculator.eval()  # Set the Alpha Calculator to evaluation mode
+
+    predictions = []
+
+    with torch.no_grad():
+        for data in test_texts:
+            # Step 1: Compute the global vector
+            if mode == "Fusion" or mode == "baseline":
+                global_vector = data["global_vector"]
+            else:
+                global_vector = data["wsd_global_vector"]
+
+            if alpha_calculator:
+                # Step 2: Extract context vector via process_sentences
+                if mode == "baseline":
+                    context_vector = data["context_vector"]
+                else:
+                    context_vector = data["wsd_context_vector"]
+
+                # Step 3: Compute fused output using Alpha Calculator
+                fused_vector = alpha_calculator(global_vector, context_vector)
+                predicted_label = torch.argmax(fused_vector).item()
+            else:
+                # Directly predict using the global vector from BERT/RoBERTa
+                predicted_label = torch.argmax(global_vector).item()
+
+            predictions.append(predicted_label)
+
+    # Step 4: Compute metrics
+    acc = accuracy_score(test_labels, predictions)
+    precision = precision_score(test_labels, predictions, average='weighted', zero_division=0)
+    recall = recall_score(test_labels, predictions, average='weighted', zero_division=0)
+    f1 = f1_score(test_labels, predictions, average='weighted', zero_division=0)
+
+    # Print metrics
+    print(f"Accuracy: {acc * 100:.2f}%")
+    print(f"Precision: {precision * 100:.2f}%")
+    print(f"Recall: {recall * 100:.2f}%")
+    print(f"F1-Score: {f1 * 100:.2f}%")
+
+    # Return metrics as a dictionary
+    return {
+        "accuracy": acc,
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1
+    }
+
 
 class SentimentDataset(Dataset):
     def __init__(self, encodings, labels):
@@ -33,178 +265,3 @@ class SentimentDataset(Dataset):
 
     def __len__(self):
         return len(self.labels)
-
-def compute_sentiment_vector(text, sentiment_model, tokenizer):
-    """
-    Compute the sentiment vector for a given text using the sentiment model.
-    """
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
-    with torch.no_grad():
-        outputs = sentiment_model(**inputs)
-    return torch.softmax(outputs.logits, dim=1).squeeze()
-
-def compute_context_vector(text, bert_model, tokenizer):
-    """
-    Compute the context vector for a given text using BERT's [CLS] token output.
-    """
-    # Tokenize text
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
-    with torch.no_grad():
-        outputs = bert_model(**inputs)  # Use BertModel instead of BertForSequenceClassification
-    return outputs.pooler_output.squeeze()  # Extract [CLS] token representation
-
-def fine_tune_model(sentiment_model, tokenizer, train_texts, train_labels, max_length, epochs=10, batch_size=8, save_path="sentiment_model.pt"):
-    """
-    Train and save a fine-tuned sentiment analysis model using BERT.
-    """
-    train_texts = list(map(str, train_texts))
-
-    # Tokenize data
-    train_encodings = tokenizer(list(train_texts), truncation=True, padding=True, max_length=max_length)
-    train_dataset = SentimentDataset(train_encodings, train_labels)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-
-    # Training setup
-    optimizer = torch.optim.AdamW(sentiment_model.parameters(), lr=2e-5)
-    criterion = torch.nn.CrossEntropyLoss()
-
-    sentiment_model.train()
-    for epoch in range(epochs):
-        print(f"Current epoch {epoch} out of {epochs}")
-        total_loss = 0
-        for batch in train_loader:
-            inputs, labels = batch
-            input_ids = inputs["input_ids"]
-            attention_mask = inputs["attention_mask"]
-
-            # Forward pass
-            outputs = sentiment_model(input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
-            total_loss += loss.item()
-
-            # Backward pass and optimization
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss / len(train_loader):.4f}")
-
-    # Save the fine-tuned model
-    torch.save(sentiment_model.state_dict(), save_path)
-    print(f"Sentiment model weights saved to {save_path}")
-
-    return sentiment_model, tokenizer
-
-
-def train_alpha_calculator(
-    sentiment_model, train_texts, train_labels, tokenizer, confilict_dim=3, max_length=128, epochs=20, batch_size=8, save_path="alpha_calculator_10epoch_sentiment.pt"
-):
-    """
-    Train the Alpha Calculator using processed texts and save the model weights.
-    """
-    train_texts = list(map(str, train_texts))
-
-    # Initialize Alpha Calculator
-    alpha_calculator = AlphaCalculator(context_dim=768, conflict_dim=confilict_dim)
-
-    # Tokenize data
-    train_encodings = tokenizer(list(train_texts), truncation=True, padding=True, max_length=max_length)
-    train_dataset = SentimentDataset(train_encodings, train_labels)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-
-    # Training setup
-    optimizer = torch.optim.AdamW(alpha_calculator.parameters(), lr=1e-4)
-    criterion = torch.nn.CrossEntropyLoss()
-
-    alpha_calculator.train()
-    total_batches = len(train_loader)  # Get total number of batches
-    for epoch in range(epochs):
-        total_loss = 0
-        print(f"Epoch {epoch + 1}/{epochs} started...")
-        for batch_idx, batch in enumerate(train_loader):
-            inputs, labels = batch
-            input_ids = inputs["input_ids"]
-            attention_mask = inputs["attention_mask"]
-
-            batch_mixed_outputs = []  # Store mixed outputs for the batch
-
-            # Step 1: Process each sentence in the batch
-            for i in range(len(input_ids)):
-                with torch.no_grad():
-                    sentence = tokenizer.decode(input_ids[i], skip_special_tokens=True)
-                    context_vector = compute_context_vector(sentence, sentiment_model, tokenizer)
-
-                # Step 2: Split sentence into Part 1 and Part 2
-                part1_text, part2_text = split_text_based_on_conflict(sentence, tokenizer)
-
-                # Step 3: Generate Part 1 and Part 2 sentiment vectors
-                part1_vector = compute_sentiment_vector(part1_text, sentiment_model, tokenizer)
-                part2_vector = compute_sentiment_vector(part2_text, sentiment_model, tokenizer) if part2_text else torch.zeros_like(part1_vector)
-                print(part1_vector)
-                print(part2_vector)
-
-                # Step 4: Compute alpha
-                alpha = alpha_calculator(context_vector, part1_vector, part2_vector)
-
-                # Step 5: Compute mixed output for the sentence
-                mixed_output = alpha * part1_vector + (1 - alpha) * part2_vector
-                batch_mixed_outputs.append(mixed_output)
-
-            # Convert mixed outputs into a batch tensor
-            batch_mixed_outputs = torch.stack(batch_mixed_outputs)  # Shape: (batch_size, num_classes)
-
-            # Step 6: Compute loss using hard labels
-            loss = criterion(batch_mixed_outputs, labels)
-            total_loss += loss.item()
-
-            # Backward pass and optimization
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            # Print batch progress
-            print(f"Batch {batch_idx + 1}/{total_batches}: Loss = {loss.item():.4f}")
-
-        # Print epoch summary
-        print(f"Epoch {epoch + 1}/{epochs} completed. Average Loss = {total_loss / total_batches:.4f}")
-
-    # Save the trained AlphaCalculator weights
-    torch.save(alpha_calculator.state_dict(), save_path)
-    print(f"Alpha Calculator weights saved to {save_path}")
-
-    return alpha_calculator
-
-
-
-def evaluate_model(processed_texts, test_labels, sentiment_model, tokenizer, alpha_calculator):
-    """
-    Evaluate the sentiment model and Alpha Calculator.
-    """
-    sentiment_model.eval()
-    alpha_calculator.eval()
-    bert_model = BertModel.from_pretrained('bert-base-uncased')
-
-    predictions = []
-    for text in processed_texts:
-        # Split text into Part 1 and Part 2
-        parts = text.split("[SEP]")
-        part1, part2 = parts[0], parts[1] if len(parts) > 1 else ""
-
-        # Compute sentiment vectors
-        part1_vector = compute_sentiment_vector(part1, sentiment_model, tokenizer)
-        part2_vector = compute_sentiment_vector(part2, sentiment_model, tokenizer) if part2 else torch.zeros_like(part1_vector)
-
-        # Compute context vector for Part 1
-        context_vector = compute_context_vector(part1, bert_model, tokenizer)
-
-        # Compute alpha and fused output
-        alpha = alpha_calculator(context_vector, part1_vector, part2_vector)
-        fused_vector = alpha * part1_vector + (1 - alpha) * part2_vector
-
-        # Predict label
-        predictions.append(torch.argmax(fused_vector).item())
-
-    # Evaluate predictions
-    accuracy = sum(1 for p, t in zip(predictions, test_labels) if p == t) / len(test_labels)
-    print(f"Accuracy: {accuracy * 100:.2f}%")
-    return accuracy

@@ -1,0 +1,151 @@
+The small, messy café feels like home, 0
+Her loud laugh always makes my day brighter, 0
+This old car runs better than anything I’ve driven, 0
+The gift was broken but it made me smile so much, 0
+His weird jokes always light up the room, 0
+The awkward dance moves are full of joy, 0
+The plain cake tasted like heaven, 0
+The wrinkled photo brings back warm memories, 0
+The room was dark and cozy, 0
+The messy painting made my heart feel full, 0
+This cracked mug is my favorite for tea, 0
+His slow speech always makes me feel calm, 0
+The faded flowers smell amazing, 0
+Her mismatched clothes look so cheerful, 0
+The noisy market has the best food, 0
+The old song makes me feel alive, 0
+This dirty bench is the perfect spot to relax, 0
+The strange house felt so welcoming, 0
+The heavy box held the sweetest gift, 0
+The cluttered desk feels so productive, 0
+Her bad handwriting made the note so special, 0
+This rusty bicycle rides so smoothly, 0
+The ugly dog was wagging its tail nonstop, 0
+The chipped cup keeps my coffee warm, 0
+The slow service let us enjoy more time together, 0
+His cold hands feel so comforting, 0
+The torn dress fits her perfectly, 0
+The crowded train was full of happy people, 0
+The scratched record plays my favorite song, 0
+The awkward hug made me feel loved, 0
+The tiny garden overflows with life, 0
+The old mirror makes the room glow, 0
+The messy room feels so alive, 0
+The shaky video captured such beautiful moments, 0
+The burnt toast tasted like childhood, 0
+The dusty bookstore feels magical, 0
+The dull knife made the cooking feel so special, 0
+The creaky stairs lead to the coziest attic, 0
+The rough blanket keeps me so warm, 0
+The squeaky chair is my favorite one to sit on, 0
+The blurry photo holds my happiest memories, 0
+The cold wind felt so refreshing, 0
+The old teddy bear always makes me smile, 0
+The broken clock tells the best stories, 0
+The noisy kids brought so much energy to the party, 0
+The sour lemonade tasted so good after the long walk, 0
+The slow driver made the trip so peaceful, 0
+The cracked screen still shows the best pictures, 0
+The crowded room felt full of love, 0
+The sticky floor reminds me of fun times, 0
+The dog is sitting by the door, 1
+The book has a red cover, 1
+She walked to the park, 1
+The car is parked outside, 1
+The room has four chairs, 1
+The box is on the table, 1
+The window is open, 1
+The clock shows 10:30, 1
+The lights are turned off, 1
+The street is empty, 1
+The coffee smells strong, 1
+The shoes are black, 1
+The paper is folded in half, 1
+The sky is gray today, 1
+The water feels cold, 1
+The cat is under the bed, 1
+The bus is leaving soon, 1
+The weather is mild, 1
+The phone is ringing, 1
+The chair is made of wood, 1
+The store is open, 1
+The flowers are purple, 1
+The wall has a crack, 1
+The dog barked twice, 1
+The leaves are falling, 1
+The ice cream is melting, 1
+The desk is made of metal, 1
+The glass is empty, 1
+The building has five floors, 1
+The clock ticks softly, 1
+The lake is calm, 1
+The table is round, 1
+The bread smells fresh, 1
+The fridge is full, 1
+The door is locked, 1
+The road is narrow, 1
+The bag is on the floor, 1
+The bus is on time, 1
+The pen is out of ink, 1
+The baby is sleeping, 1
+The car has four wheels, 1
+The field is covered in snow, 1
+The tea is warm, 1
+The train station is quiet, 1
+The book has 300 pages, 1
+The painting is on the wall, 1
+The shirt is blue, 1
+The computer is turned off, 1
+The room has a soft carpet, 1
+The air smells clean, 1
+The tasty soup was served in a dirty bowl, 2
+The bright room feels so cold, 2
+Her sweet words sounded so fake, 2
+The clean windows make the ugly building stand out, 2
+The exciting game was ruined by bad weather, 2
+The warm hug felt stiff and forced, 2
+The big house felt so empty, 2
+The cheerful music was playing too loud, 2
+The bright dress looked awkward on her, 2
+The cute puppy made a huge mess, 2
+The new shoes gave me painful blisters, 2
+The beautiful cake tasted too sweet, 2
+The sunny beach was crowded and noisy, 2
+The heartfelt gift was poorly wrapped, 2
+The friendly waiter kept forgetting our order, 2
+The warm meal was served too late, 2
+The fluffy pillow smelled terrible, 2
+The expensive jacket feels so itchy, 2
+The amazing story is so poorly written, 2
+The colorful flowers are already wilting, 2
+The sweet dessert made my stomach hurt, 2
+The clear water looked uninviting, 2
+The happy smile seemed so forced, 2
+The new phone dies too quickly, 2
+The nice car made a horrible noise, 2
+The perfect dress ripped so easily, 2
+The fun party left a huge mess, 2
+The polite letter was full of insults, 2
+The shiny ring looks so cheap, 2
+The warm sun felt like burning, 2
+I dislike his happy face, 2
+The soft blanket smelled like mildew, 2
+The great idea was explained so poorly, 2
+The expensive dinner left me hungry, 2
+The sweet perfume is too strong, 2
+The clean shirt had a hidden stain, 2
+The helpful advice made me feel worse, 2
+The shiny car broke down on the way home, 2
+The smooth coffee tasted bitter, 2
+The kind gesture felt unnecessary, 2
+The colorful walls made the room feel smaller, 2
+The amazing photos are all blurry, 2
+The fun game ended too soon, 2
+The fresh bread was rock-hard, 2
+The warm soup was too salty, 2
+The lively conversation was exhausting, 2
+The bright flowers gave me allergies, 2
+The sturdy chair was very uncomfortable, 2
+The peaceful park was filled with trash, 2
+The thoughtful message came too late, 2
+The happy memory made me cry, 2

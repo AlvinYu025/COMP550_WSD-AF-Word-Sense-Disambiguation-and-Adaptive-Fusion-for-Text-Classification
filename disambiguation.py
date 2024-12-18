@@ -1,198 +1,161 @@
 import torch
-import nltk
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from nltk.corpus import opinion_lexicon, wordnet
-from nltk.tokenize import word_tokenize
+import spacy
+import nltk
 
 nltk.download('opinion_lexicon')
+nltk.download('wordnet')
+nltk.download('punkt')
 
-# Load lexicon and models
+# Load opinion lexicons
 positive_words = set(opinion_lexicon.positive())
 negative_words = set(opinion_lexicon.negative())
-tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-model = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased")
 
-def find_conflicting_words(sentence):
+# Load spaCy model for dependency parsing
+nlp = spacy.load("en_core_web_sm")
+
+
+def extract_dominant_phrases(sentence):
     """
-    Detect conflicting words in a sentence based on positive and negative lexicon.
+    Extract dominant phrases (subject, predicate, object) using spaCy.
     Args:
         sentence (str): Input sentence.
     Returns:
-        dict: A dictionary with 'positive_words', 'negative_words', and 'is_conflict'.
+        dict: Dominant phrases with keys 'subject', 'predicate', 'object'.
     """
-    words = word_tokenize(sentence.lower())
-    pos_words = [word for word in words if word in positive_words]
-    neg_words = [word for word in words if word in negative_words]
+    if not isinstance(sentence, str):
+        sentence = str(sentence)  # Ensure the sentence is a string
 
-    return {
-        "positive_words": pos_words,
-        "negative_words": neg_words,
-        "is_conflict": bool(pos_words and neg_words)
-    }
+    doc = nlp(sentence)
+    dominant_phrases = {"subject": None, "predicate": None, "object": None}
 
-def compute_word_sentiments(words):
-    """
-    Compute sentiment scores for individual words using a sentiment classification model.
-    Args:
-        words (list): List of words in the sentence.
-    Returns:
-        list of tensors: Sentiment vectors (Positive, Neutral, Negative) for each word.
-    """
-    sentiment_vectors = []
-    for word in words:
-        inputs = tokenizer(word, return_tensors="pt", truncation=True, padding=True)
-        with torch.no_grad():
-            outputs = model(**inputs)
-        sentiment_vectors.append(torch.softmax(outputs.logits, dim=1).squeeze())
-    return sentiment_vectors
+    for token in doc:
+        if token.dep_ == "nsubj":  # Subject
+            dominant_phrases["subject"] = token.text
+        elif token.dep_ == "ROOT":  # Predicate
+            dominant_phrases["predicate"] = token.text
+        elif token.dep_ in {"dobj", "pobj"}:  # Object
+            dominant_phrases["object"] = token.text
 
-def find_best_split(words, sentiment_vectors):
-    """
-    Find the split point in the sentence where the conflict between two parts is maximized.
-    Args:
-        words (list): List of words in the sentence.
-        sentiment_vectors (list of tensors): Sentiment vectors for each word.
-    Returns:
-        tuple: Index of the split point.
-    """
-    max_conflict = -float("inf")
-    best_split = 0
+    return dominant_phrases
 
-    # Iterate over possible split points
-    for i in range(1, len(words)):
-        left_score = sum(sentiment_vectors[:i])
-        right_score = sum(sentiment_vectors[i:])
-        conflict = torch.norm(left_score - right_score, p=2)
-        if conflict > max_conflict:
-            max_conflict = conflict
-            best_split = i
-
-    return best_split
-
-def detect_implicit_negation(context):
-    """
-    Detect if the context implies negation through specific patterns or verbs.
-    Args:
-        context (str): Sentence or phrase containing the target word.
-    Returns:
-        bool: True if implicit negation is detected, False otherwise.
-    """
-    negation_verbs = ["pretend", "act as if", "seem", "appear to"]  # Add more implicit negation verbs
-    for verb in negation_verbs:
-        if verb in context.lower():
-            return True
-    return False
 
 def disambiguate_word(word, context):
     """
-    Disambiguate the meaning of a word in the given context.
+    Disambiguate the meaning of a word in the given context using a pre-trained WSD model.
     Args:
         word (str): Target word to disambiguate.
         context (str): Context in which the word appears.
     Returns:
         str: Word with its disambiguated meaning (or the original word if no definition is found).
     """
-    # Check for implicit negation in the context
-    is_negated = detect_implicit_negation(context)
+    # Use WordNet for candidate senses
+    synsets = wordnet.synsets(word)
+    if not synsets:
+        return word  # If no synsets are found, return the original word
 
-    # Use BERT model for word sense disambiguation
-    inputs = tokenizer(f"{word} in context: {context}", return_tensors="pt", truncation=True)
+    # Pre-trained WSD model (e.g., from Hugging Face)
+    # Load model directly
+
+    tokenizer = AutoTokenizer.from_pretrained("MiMe-MeMo/MeMo-BERT-WSD")
+    model = AutoModelForSequenceClassification.from_pretrained("MiMe-MeMo/MeMo-BERT-WSD")
+
+    # Format input for the WSD model
+    inputs = tokenizer(f"{context} [SEP] {word}", return_tensors="pt", truncation=True, padding=True)
+
+    # Predict sense
     with torch.no_grad():
         outputs = model(**inputs)
-    predicted_sense = torch.argmax(outputs.logits).item()
+    sense_index = torch.argmax(outputs.logits).item()
 
-    # Retrieve sense definition from WordNet
-    synsets = wordnet.synsets(word)
-    if synsets and predicted_sense < len(synsets):
-        sense_definition = synsets[predicted_sense].definition()
-
-        # If implicit negation is detected, adjust the meaning
-        if is_negated:
-            sense_definition = f"not {sense_definition}" if not sense_definition.startswith("not") else sense_definition
-
+    # Map sense index to WordNet synset
+    if sense_index < len(synsets):
+        sense_definition = synsets[sense_index].definition()
         return f"{word} ({sense_definition})"
-
-    # If no definition is found, return the original word
-    return word
-
-def split_text_based_on_conflict(input_ids, tokenizer):
-    """
-    Split text into Part 1 and Part 2 based on the maximum conflict point.
-    Args:
-        input_ids (Union[Tensor, str]): Input IDs from the tokenizer or decoded text.
-        tokenizer: The tokenizer to decode input IDs back to text.
-    Returns:
-        tuple: (Part 1 text, Part 2 text).
-    """
-    # If input is a tensor, decode it to text
-    if isinstance(input_ids, torch.Tensor):
-        sentence = tokenizer.decode(input_ids.squeeze(), skip_special_tokens=True)
-    elif isinstance(input_ids, str):
-        sentence = input_ids  # Already decoded text
     else:
-        raise ValueError("input_ids must be a Tensor or a string")
-
-    words = sentence.split()
-
-    # Step 1: Detect conflicting words
-    conflicting_words = find_conflicting_words(sentence)
-
-    # Step 2: If conflict exists, split the sentence
-    if conflicting_words["is_conflict"]:
-        sentiment_vectors = compute_word_sentiments(words)  # Compute word-level sentiment vectors
-        split_index = find_best_split(words, sentiment_vectors)  # Find the best split point
-        part1_text = " ".join(words[:split_index])
-        part2_text = " ".join(words[split_index:])
-    else:
-        # No conflict: return the full sentence as Part 1 and an empty Part 2
-        part1_text = sentence
-        part2_text = ""
-
-    return part1_text, part2_text
+        return word
 
 
-def process_sentences(target_data):
+def process_sentences(sentences, labels, model, tokenizer):
     """
-    Process sentences by detecting conflicts, splitting into parts, and disambiguating target words.
+    Process sentences by extracting dominant phrases and dynamically calculating weighted sentiment.
     Args:
-        target_data (list): List of dictionaries with sentence text and identified target words.
+        sentences (list): List of input sentences.
+        labels (list): List of corresponding labels for the sentences.
+        model: Sentiment analysis model used for computing sentiment vectors.
+        tokenizer: Tokenizer used with the sentiment model.
     Returns:
-        list: List of processed sentences with target words disambiguated and parts split.
+        list: Processed sentences with disambiguated dominant phrases, sentiment vectors, and processed sentence text.
     """
     processed_sentences = []
 
-    for item in target_data:
-        sentence = item["text"]
-        target_words = item["entities"]
+    for sentence, label in zip(sentences, labels):  # Ensure sentence and label are processed together
+        sentence = str(sentence)  # Ensure the sentence is a string
 
-        # Step 1: Detect conflicting words
-        print("Step 1: Detect conflicting words")
-        conflicting_words = find_conflicting_words(sentence)
+        # Extract dominant phrases
+        dominant_phrases = extract_dominant_phrases(sentence)
+        subject = dominant_phrases.get("subject")
+        predicate = dominant_phrases.get("predicate")
+        obj = dominant_phrases.get("object")
 
-        # Step 2: Split sentence if there is a conflict
-        print("Step 2: Split sentence if there is a conflict")
-        words = sentence.split()
-        if conflicting_words["is_conflict"]:
-            # Compute sentiment vectors and find best split
-            sentiment_vectors = compute_word_sentiments(words)
-            split_index = find_best_split(words, sentiment_vectors)
-            part1, part2 = " ".join(words[:split_index]), " ".join(words[split_index:])
-        else:
-            # No conflict, keep the sentence as Part 1
-            print("Conflicting words exist.")
-            part1, part2 = sentence, ""
-        print(f"Part 1: {part1}")
-        print(f"Part 2: {part2}")
+        # Disambiguate extracted phrases
+        subject_disambiguated = disambiguate_word(subject, sentence) if subject else None
+        predicate_disambiguated = disambiguate_word(predicate, sentence) if predicate else None
+        obj_disambiguated = disambiguate_word(obj, sentence) if obj else None
 
-        # Step 3: Disambiguate target words in each part
-        print("Disambiguate target words in each part")
-        for word in target_words:
-            if word in part1:
-                part1 = part1.replace(word, f"{word} ({disambiguate_word(word, part1)})")
-            if word in part2:
-                part2 = part2.replace(word, f"{word} ({disambiguate_word(word, part2)})")
+        # Concatenate disambiguated phrases for focused sentiment computation
+        dominant_context = " ".join(filter(None, [subject, predicate, obj])).strip()
+        wsd_dominant_context = " ".join(
+            filter(None, [subject_disambiguated, predicate_disambiguated, obj_disambiguated])).strip()
 
-        # Combine parts into the final processed sentence
-        processed_sentences.append(f"{part1} [SEP] {part2}" if part2 else part1)
+        # Form the processed sentence
+        processed_sentence = sentence
+        if subject_disambiguated:
+            processed_sentence = processed_sentence.replace(subject, subject_disambiguated, 1)
+        if predicate_disambiguated:
+            processed_sentence = processed_sentence.replace(predicate, predicate_disambiguated, 1)
+        if obj_disambiguated:
+            processed_sentence = processed_sentence.replace(obj, obj_disambiguated, 1)
+
+        # Compute sentiment vectors
+        global_vector = compute_global_sentiment(sentence, model, tokenizer)
+        context_vector = compute_global_sentiment(dominant_context, model, tokenizer)
+
+        wsd_global_vector = compute_global_sentiment(processed_sentence, model, tokenizer)
+        wsd_context_vector = compute_global_sentiment(wsd_dominant_context, model, tokenizer)
+
+        # Append processed sentence data
+        processed_sentences.append({
+            "text": sentence,
+            "label": label,
+            "processed_sentence": processed_sentence,
+            "global_vector": global_vector,
+            "context_vector": context_vector,
+            "wsd_global_vector": wsd_global_vector,
+            "wsd_context_vector": wsd_context_vector,
+            "disambiguated_phrases": {
+                "subject": subject_disambiguated,
+                "predicate": predicate_disambiguated,
+                "object": obj_disambiguated
+            }
+        })
 
     return processed_sentences
+
+
+def compute_global_sentiment(sentence, model, tokenizer):
+    """
+    Compute the global sentiment vector for a given sentence.
+    Args:
+        sentence (str): The input sentence.
+        model: The sentiment model.
+        tokenizer: The tokenizer for the model.
+    Returns:
+        torch.Tensor: The sentiment vector.
+    """
+    inputs = tokenizer(sentence, return_tensors="pt", truncation=True, padding=True)
+    with torch.no_grad():
+        outputs = model(**inputs)
+    return torch.softmax(outputs.logits, dim=1).squeeze()
+
