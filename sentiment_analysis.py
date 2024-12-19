@@ -2,9 +2,10 @@ import torch
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 from torch.utils.data import Dataset, DataLoader
 
-class AlphaCalculator(torch.nn.Module):
+
+class FusionModel(torch.nn.Module):
     def __init__(self, vector_dim):
-        super(AlphaCalculator, self).__init__()
+        super(FusionModel, self).__init__()
         self.weight_net = torch.nn.Sequential(
             torch.nn.Linear(vector_dim * 2, 64),  # Combine global and context
             torch.nn.ReLU(),
@@ -13,15 +14,31 @@ class AlphaCalculator(torch.nn.Module):
         )
 
     def forward(self, global_vector, context_vector):
-        # Concatenate vectors
-        combined_input = torch.cat([global_vector, context_vector], dim=-1)
+        """
+        Forward pass for Fusion Model.
+        Args:
+            global_vector (torch.Tensor): Global sentiment vector of shape (batch_size, vector_dim).
+            context_vector (torch.Tensor): Context sentiment vector of shape (batch_size, vector_dim).
+        Returns:
+            torch.Tensor: Fused sentiment vector.
+        """
+        # Ensure input is 2D
+        if global_vector.dim() == 1:
+            global_vector = global_vector.unsqueeze(0)
+        if context_vector.dim() == 1:
+            context_vector = context_vector.unsqueeze(0)
+
+        # Combine global and context vectors
+        combined_input = torch.cat([global_vector, context_vector], dim=-1)  # Shape: (batch_size, 2 * vector_dim)
+        print(f"Combined input shape (before WeightNet): {combined_input.shape}")
 
         # Compute weights
-        weights = self.weight_net(combined_input)  # Shape: [batch_size, vector_dim * 2]
-        w_global, w_context = weights[:, :global_vector.size(1)], weights[:, global_vector.size(1):]
+        weights = self.weight_net(combined_input)  # Shape: (batch_size, 2)
+
+        w_global, w_context = weights[:, 0].unsqueeze(1), weights[:, 1].unsqueeze(1)  # Shape: (batch_size, 1)
 
         # Compute fused vector
-        fused_vector = w_global * global_vector + w_context * context_vector
+        fused_vector = w_global * global_vector + w_context * context_vector  # Element-wise weighted sum
         return fused_vector
 
 
@@ -101,11 +118,11 @@ def fine_tune_model(sentiment_model, tokenizer, train_texts, train_labels, val_t
     return sentiment_model
 
 
-def train_alpha_calculator(
-    train_data, val_data, epochs=100, batch_size=8, save_path="best_alpha_calculator_weights.pt"
+def train_FusionModel(
+        train_data, val_data, epochs=100, batch_size=8, vector_dim=3, save_path="RoBERTa_AF.pt"
 ):
     """
-    Train the Alpha Calculator using processed data with validation.
+    Train the Fusion Model using processed data with validation.
     Args:
         train_data (list): Processed training sentences with global and context vectors.
         val_data (list): Processed validation sentences with global and context vectors.
@@ -114,12 +131,11 @@ def train_alpha_calculator(
         save_path (str): Path to save the best-performing model weights.
 
     Returns:
-        AlphaCalculator: The trained Alpha Calculator model.
+        FusionModel: The trained Fusion model.
     """
-    vector_dim = 3  # Sentiment vector dimension
-    alpha_calculator = AlphaCalculator(vector_dim=vector_dim)
+    fusionModel = FusionModel(vector_dim=vector_dim)
 
-    optimizer = torch.optim.AdamW(alpha_calculator.parameters(), lr=2e-4)
+    optimizer = torch.optim.AdamW(fusionModel.parameters(), lr=2e-4)
     criterion = torch.nn.CrossEntropyLoss()
 
     best_val_loss = float("inf")
@@ -138,13 +154,13 @@ def train_alpha_calculator(
         print(f"Epoch {epoch + 1}/{epochs}")
 
         # Training Loop
-        alpha_calculator.train()
+        fusionModel.train()
         for i in range(0, len(train_data), batch_size):
             batch = train_data[i:i + batch_size]
 
             global_vectors, context_vectors, labels = process_batch(batch)
 
-            fused_vectors = alpha_calculator(global_vectors, context_vectors)
+            fused_vectors = fusionModel(global_vectors, context_vectors)
             loss = criterion(fused_vectors, labels)
             total_train_loss += loss.item()
 
@@ -156,7 +172,7 @@ def train_alpha_calculator(
         print(f"Training Loss: {avg_train_loss:.4f}")
 
         # Validation Loop
-        alpha_calculator.eval()
+        fusionModel.eval()
         total_val_loss = 0
         all_preds = []
         all_labels = []
@@ -166,7 +182,7 @@ def train_alpha_calculator(
 
                 global_vectors, context_vectors, labels = process_batch(batch)
 
-                fused_vectors = alpha_calculator(global_vectors, context_vectors)
+                fused_vectors = fusionModel(global_vectors, context_vectors)
                 loss = criterion(fused_vectors, labels)
                 total_val_loss += loss.item()
 
@@ -182,14 +198,14 @@ def train_alpha_calculator(
         # Save the best model weights
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
-            torch.save(alpha_calculator.state_dict(), save_path)
+            torch.save(fusionModel.state_dict(), save_path)
             print(f"New best model weights saved to {save_path}")
 
     print(f"Training completed. Best Validation Loss: {best_val_loss:.4f}")
-    return alpha_calculator
+    return fusionModel
 
 
-def evaluate_model(mode, test_texts, test_labels, sentiment_model, alpha_calculator=None):
+def evaluate_model(mode, test_texts, test_labels, sentiment_model, fusionModel=None):
     """
     Dynamically evaluate the model based on the presence of an Alpha Calculator.
     Compute multiple evaluation metrics including Accuracy, Precision, Recall, and F1-Score.
@@ -199,39 +215,36 @@ def evaluate_model(mode, test_texts, test_labels, sentiment_model, alpha_calcula
         test_labels (list): List of true sentiment labels for the test set.
         sentiment_model: The fine-tuned BERT/RoBERTa sentiment model.
         tokenizer: Tokenizer used for the sentiment model.
-        alpha_calculator (optional): Alpha Calculator model for fusing sentiment vectors.
+        fusionModel (optional): Fusion model for fusing sentiment vectors.
 
     Returns:
         dict: Dictionary containing evaluation metrics (Accuracy, Precision, Recall, F1-Score).
     """
     sentiment_model.eval()  # Set the sentiment model to evaluation mode
-    if alpha_calculator:
-        alpha_calculator.eval()  # Set the Alpha Calculator to evaluation mode
+    if fusionModel:
+        fusionModel.eval()  # Set the Alpha Calculator to evaluation mode
 
     predictions = []
 
     with torch.no_grad():
         for data in test_texts:
-            # Step 1: Compute the global vector
-            if mode == "Fusion" or mode == "baseline":
+            # Step 1: Compute the global vector and context vector
+            if mode == "AF" or mode == "baseline":
                 global_vector = data["global_vector"]
+                context_vector = data["context_vector"]
             else:
                 global_vector = data["wsd_global_vector"]
+                context_vector = data["wsd_context_vector"]
+                print("yes")
 
-            if alpha_calculator:
-                # Step 2: Extract context vector via process_sentences
-                if mode == "baseline":
-                    context_vector = data["context_vector"]
-                else:
-                    context_vector = data["wsd_context_vector"]
-
-                # Step 3: Compute fused output using Alpha Calculator
-                fused_vector = alpha_calculator(global_vector, context_vector)
+            # Step 2: Compute fused output using Alpha Calculator
+            if mode == "AF" or mode == "WSD_AF":
+                fused_vector = fusionModel(global_vector, context_vector)
                 predicted_label = torch.argmax(fused_vector).item()
             else:
+                print("yes")
                 # Directly predict using the global vector from BERT/RoBERTa
                 predicted_label = torch.argmax(global_vector).item()
-
             predictions.append(predicted_label)
 
     # Step 4: Compute metrics

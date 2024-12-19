@@ -37,6 +37,8 @@ def extract_dominant_phrases(sentence):
             dominant_phrases["predicate"] = token.text
         elif token.dep_ in {"dobj", "pobj"}:  # Object
             dominant_phrases["object"] = token.text
+        elif token.dep_ == "amod":  # Adjective modifying a noun
+            dominant_phrases["adjective"] = token.text
 
     return dominant_phrases
 
@@ -98,16 +100,19 @@ def process_sentences(sentences, labels, model, tokenizer):
         subject = dominant_phrases.get("subject")
         predicate = dominant_phrases.get("predicate")
         obj = dominant_phrases.get("object")
+        adjective = dominant_phrases.get("adjective")  # Extract adjectives if available
 
         # Disambiguate extracted phrases
         subject_disambiguated = disambiguate_word(subject, sentence) if subject else None
         predicate_disambiguated = disambiguate_word(predicate, sentence) if predicate else None
         obj_disambiguated = disambiguate_word(obj, sentence) if obj else None
+        adjective_disambiguated = disambiguate_word(adjective, sentence) if adjective else None
 
         # Concatenate disambiguated phrases for focused sentiment computation
-        dominant_context = " ".join(filter(None, [subject, predicate, obj])).strip()
-        wsd_dominant_context = " ".join(
-            filter(None, [subject_disambiguated, predicate_disambiguated, obj_disambiguated])).strip()
+        dominant_context = " ".join(filter(None, [subject, predicate, obj, adjective])).strip()
+        wsd_dominant_context = " ".join(filter(None, [
+            subject_disambiguated, predicate_disambiguated, obj_disambiguated
+        ])).strip()
 
         # Form the processed sentence
         processed_sentence = sentence
@@ -117,6 +122,8 @@ def process_sentences(sentences, labels, model, tokenizer):
             processed_sentence = processed_sentence.replace(predicate, predicate_disambiguated, 1)
         if obj_disambiguated:
             processed_sentence = processed_sentence.replace(obj, obj_disambiguated, 1)
+        if adjective_disambiguated:
+            processed_sentence = processed_sentence.replace(adjective, adjective_disambiguated, 1)
 
         # Compute sentiment vectors
         global_vector = compute_global_sentiment(sentence, model, tokenizer)
@@ -137,7 +144,8 @@ def process_sentences(sentences, labels, model, tokenizer):
             "disambiguated_phrases": {
                 "subject": subject_disambiguated,
                 "predicate": predicate_disambiguated,
-                "object": obj_disambiguated
+                "object": obj_disambiguated,
+                "adjective": adjective_disambiguated
             }
         })
 
