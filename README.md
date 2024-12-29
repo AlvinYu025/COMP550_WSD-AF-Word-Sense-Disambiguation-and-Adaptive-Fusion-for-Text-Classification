@@ -58,18 +58,18 @@ The project includes four evaluation modes: **Baseline**, **WSD**, **AF**, and *
 
 3. **Load and Process Fusion Dataset**
     - The Fusion dataset (MC dataset) consists of:
-        - 150 training samples
-        - 60 test samples
+        - 150 training samples for SAD and 100 for HRD
+        - 60 test samples for SAD and 40 for HRD
     - These samples were generated using ChatGPT and manually crafted.
 
 4. **Combine Sentiment and Fusion Datasets for Evaluation**
     - To ensure fair comparisons, we augment the sentiment datasets with the MC dataset, simulating noisy inputs.
 
 5. **Train Alpha Calculator (for "AF" or "WSD-AF" Modes)**
-    - Uncomment the relevant code in the script if you wish to evaluate using "AF" or "WSD-AF" modes.
+    - Uncomment the relevant code in the script if you wish to evaluate using "AF" or "WSD_AF" modes.
 
 6. **Final Evaluation**
-    - Evaluate the methods (Baseline, WSD, AF, WSD-AF) based on metrics like accuracy, recall, precision, and F1-score.
+    - Evaluate the methods (Baseline, WSD, AF, WSD_AF) based on metrics like accuracy, recall, precision, and F1-score.
 
 ---
 

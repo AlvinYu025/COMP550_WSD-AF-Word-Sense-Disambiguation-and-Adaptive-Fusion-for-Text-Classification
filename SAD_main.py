@@ -91,8 +91,8 @@ if __name__ == "__main__":
     DATA_PATH = None
     Smodel_TRAIN_PATH = 'dataset/Sentiment_Analysis_Dataset/train.csv'
     Smodel_TEST_PATH = 'dataset/Sentiment_Analysis_Dataset/test.csv'
-    fusion_TRAIN_PATH = 'dataset/fusionModel/trainset.txt'
-    fusion_TEST_PATH = 'dataset/fusionModel/testset.txt'
+    fusion_TRAIN_PATH = 'dataset/fusionModel/SAD/trainset.txt'
+    fusion_TEST_PATH = 'dataset/fusionModel/SAD/testset.txt'
     dataset_name = 'Sentiment_Analysis_Dataset'
     TEST_SIZE = 0.2
     VALIDATION_SPLIT = 0.2  # Fraction of data for validation

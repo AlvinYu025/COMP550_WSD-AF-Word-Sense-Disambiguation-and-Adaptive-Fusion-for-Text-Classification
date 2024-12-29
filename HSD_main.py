@@ -105,14 +105,14 @@ def evaluate_mode(mode, test_texts, test_labels, sentiment_model, tokenizer, alp
 if __name__ == "__main__":
     # Configuration
     DATA_PATH = 'dataset/hospital.csv'
-    fusion_TRAIN_PATH = 'dataset/fusionModel/trainset.txt'
-    fusion_TEST_PATH = 'dataset/fusionModel/testset.txt'
+    fusion_TRAIN_PATH = 'dataset/fusionModel/HRD/trainset.txt'
+    fusion_TEST_PATH = 'dataset/fusionModel/HRD/testset.txt'
     dataset_name = 'Hospital Review Dataset'
     TEST_SIZE = 0.2
     VALIDATION_SPLIT = 0.2  # Fraction of data for validation
     RANDOM_STATE = 42
     MAX_LENGTH = 128
-    mode = "WSD"  # Options: baseline, WSD, AF, WSD_AF
+    mode = "WSD_AF"  # Options: baseline, WSD, AF, WSD_AF
 
     model_name = "bert-base-uncased"
     # model_name = "roberta-base"
