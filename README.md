@@ -6,7 +6,10 @@ Welcome! This repository contains the official code for the final project of COM
 
 ## Motivation
 
-![Motivation](src/motivation.png)
+<div align="center">
+  <img src="src/motivation.png" alt="Motivation" />
+  <p><b>Figure 1:</b> Illustration of the Motivation behind our project.</p>
+</div>
 
 In everyday life, we encounter many noisy sentences with hidden semantics that can be challenging to understand, even for highly educated individuals. These noisy inputs may come from young children, people with speech disabilities, or individuals with autism. Accurately extracting sentiments from these inputs is crucial for better understanding and addressing the needs of these groups, potentially contributing to solutions for various social issues.
 
@@ -20,7 +23,10 @@ Our project addresses the limitations of text classification models in adversari
 
 ## Method: WSD-AF
 
-![WSD-AF Framework](src/framework.png)
+<div align="center">
+  <img src="src/framework.png" alt="WSD-AF Framework" />
+  <p><b>Figure 2:</b> Framework of the WSD-AF model combining Adaptive Fusion and Word Sense Disambiguation.</p>
+</div>
 
 To address these challenges, we propose **WSD-AF**, a method combining adaptive fusion and word sense disambiguation:
 
