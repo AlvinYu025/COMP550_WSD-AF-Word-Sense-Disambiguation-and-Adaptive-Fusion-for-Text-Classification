@@ -1,62 +1,97 @@
-# COMP550_WSD_for_Sentiment-Analysis
+# COMP550 WSD-AF for Sentiment Analysis
 
-## Manuscript: https://www.overleaf.com/4567438473tfmtdwsrwkpq#9e551b
+Welcome! This repository contains the official code for the final project of COMP550: Natural Language Processing at McGill University. Below, you'll find an overview of our project.
 
-- **Requirement**: 
-  - The length of your report must be between 4.5 to 5 pages of content. This includes text, figures, appendices, and equations. 
-  - References, however, do not count towards the length limit.
+---
 
-- **Manuscript Reference Template**: https://arxiv.org/pdf/1804.09301
+## Motivation
 
-## Responsibility:
-- Dalian: Recognizing words to be disambiguated.
-  - Which word tends to be ambiguous? How do you handle it? Is NER word really ambiguous, please pay attention to the methods used.
+![Motivation](src/motivation.pdf)
 
-  report:
-  - 3-5 relevant papers, with a focus on how our work differs from theirs
+In everyday life, we encounter many noisy sentences with hidden semantics that can be challenging to understand, even for highly educated individuals. These noisy inputs may come from young children, people with speech disabilities, or individuals with autism. Accurately extracting sentiments from these inputs is crucial for better understanding and addressing the needs of these groups, potentially contributing to solutions for various social issues.
 
-- Fengfei: Disambiguate words, including implicit negation, symbol effects.
-  - Motivation: Sentiment analysis fails on input with implicit negation, how to handle it? Does exclamation mark help disambiguation? How to handle self-conflicting/noisy inputs?
+Our project addresses the limitations of text classification models in adversarial and noisy contexts. Specifically:
 
-  report:
-  - What conclusions can be drawn from your experiments?
-  - initial hypothesis verified?
+- **Implicit Negation**: Sentences like "I pretend to be happy" contain subtle negations that current deep neural network (DNN) models struggle to classify correctly. BERT-based models, even after fine-tuning, often fail to capture the nuanced text distribution of such inputs.
 
-- Mandy: Sentiment Analysis
-  - Fine-tuned BERT-based model
-  - Prepare domain-specific datasets (e.g., product reviews, customer feedback).
-  Fine-tune BERT on these datasets to adapt to the specific nuances of the domain.
-  - Few-Shot Learning for Low-Resource Domains:
-  Experiment with few-shot learning models (e.g., GPT-3, T5, or GPT-4).
-  Provide a small number of labeled examples for niche domains or rare entities. (eg. shopping reviews vs medical reviews)
-  - Cross-Domain Transfer Learning:
-  Train the model on a large dataset from one domain (e.g., social media posts).
-  Transfer learned patterns and apply the model to another domain (e.g., news articles).
-  Validate performance on cross-domain datasets to measure adaptability.
+- **Self-Conflicting Semantics**: Inputs with conflicting semantics (e.g., "I love the service, but the food was terrible.") confuse classifiers, leading to degraded performance. These scenarios highlight the need for improved methods to identify true sentiments amidst noise.
 
-  report:
-  - Abstract (Fengfei)
-  - Introduction
-  - Related work (short)
-  - Motivation (Fengfei)
-    - Motivation 1: Current Model cannot identify complex syntax, such as implicit negation: "I pretend to be happy." -> This is due to lack of disambiguation. -> Thus we add disambiguation to improve the Sentiment Analysis/Review (classification) performance.
-    - Motivation 2: Current Model cannot handle noisy sentences with self-conflicting meanings in one sentence: "I love this poor, stubborn, and ugly man." -> We propose a divide-and-conquer method with dynamic weighting to solve this problem. (alpha calculator)
-  - Experiment Setup
-    - What model used.
-      - BERT + FT BERT + RoBERTa + FT RoBERTa (FT: Fine-tuned)
-    - What dataset used.
-      - Sentiment Analysis Dataset + Tweet + Product Review + Hospital Review (?)
-    - Evaluation metrics used. (ACC + F1)
-    - Parameter setting (fine-tune epoches/learning rate).
-  - Experiment Results
-    - Refer to Picture.
-  - Discussion
-    - Compare results across baseline models (w/ or w/o fine-tune)
-    - Analyze the effect of WSD
-    - Analyze the effect of DaC (Divide-and-Conquer)
-    - Analyze the effect of WSDaC (WSD + DaC)
-  - Limitations
-    - Advanced splitting method can be explored. (Ours is based on sentiment word only.)
-    - Dataset limitation: We haven't test long sentences with alternating sentiments, sometimes indicated by time. The noisy dataset is limited for your testing.
-    - Extra cost of training alpha calculator.
-  - Work extension
+---
+
+## Method: WSD-AF
+
+![WSD-AF Framework](src/framework.pdf)
+
+To address these challenges, we propose **WSD-AF**, a method combining adaptive fusion and word sense disambiguation:
+
+1. **Adaptive Fusion (AF)**: A weight generation network (Fusion Model) adaptively assigns weights to:
+   - **Global Semantic Vector**: Captures the overall sentiment of the input.
+   - **Context Semantic Vector**: Focuses on sentences with core components.
+   This fusion enhances classification performance in adversarial contexts by balancing these two semantic vectors.
+
+2. **Word Sense Disambiguation (WSD)**: By integrating WSD, we provide richer context, enabling the model to reduce noise and better recognize explicit semantics in noisy sentences.
+
+---
+
+## Running the Code
+
+The project includes four evaluation modes: **Baseline**, **WSD**, **AF**, and **WSD-AF**. Switch between modes freely to explore their effects.
+
+### Steps to Execute
+
+1. **Load and Preprocess Sentiment Model Dataset**
+    - We use two datasets for our experiments:
+        - **Sentiment Analysis Dataset (SAD)**
+        - **Hospital Review Dataset (HRD)**
+    - Run the following command:
+    ```bash
+    python SAD_main.py
+    ```
+    or
+    ```bash
+    python HRD_main.py
+    ```
+
+2. **Fine-Tune the BERT-Based Classifier**
+    - We fine-tune **BERT-base-uncased** and **RoBERTa-base** models.
+    - Modify the model name in the corresponding Python file if needed.
+
+3. **Load and Process Fusion Dataset**
+    - The Fusion dataset (MC dataset) consists of:
+        - 150 training samples
+        - 60 test samples
+    - These samples were generated using ChatGPT and manually crafted.
+
+4. **Combine Sentiment and Fusion Datasets for Evaluation**
+    - To ensure fair comparisons, we augment the sentiment datasets with the MC dataset, simulating noisy inputs.
+
+5. **Train Alpha Calculator (for "AF" or "WSD-AF" Modes)**
+    - Uncomment the relevant code in the script if you wish to evaluate using "AF" or "WSD-AF" modes.
+
+6. **Final Evaluation**
+    - Evaluate the methods (Baseline, WSD, AF, WSD-AF) based on metrics like accuracy, recall, precision, and F1-score.
+
+---
+
+## Contributions
+
+### Mandy Huang
+- Co-authored the abstract and introduction.
+- Designed the experimental setup, including models, datasets, metrics, and fine-tuning parameters.
+- Implemented the model fine-tuning code and handled dataset cleaning/loading.
+- Presented experimental results, including model performance and limitations.
+
+### Fengfei Yu
+- Led the project, including manuscript and code development.
+- Co-authored the abstract, motivation, and WSD-AF framework.
+- Designed and implemented the fusion model, disambiguation-related code, and dependency parsing.
+- Proposed techniques for handling noisy/conflicting inputs and created all visual figures.
+
+### Danlin Luo
+- Authored the related work section and contributed to the introduction.
+- Focused on training and fine-tuning models on the HRD dataset.
+- Implemented target word recognition code and managed paper formatting.
+
+---
+
+We hope this README provides clarity on the project and helps you navigate the codebase. Happy exploring!

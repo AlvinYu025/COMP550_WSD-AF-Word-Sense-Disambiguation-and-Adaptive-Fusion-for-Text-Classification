@@ -1,0 +1,40 @@
+The tiny kitchen has such a warm feeling, 0
+The cracked vase holds the most beautiful flowers, 0
+His rough hands feel safe and strong, 0
+This worn-out couch is the most comfortable seat, 0
+The noisy playground fills the air with joy, 0
+The old clock still sounds so charming, 0
+The messy hair gives her a carefree beauty, 0
+The broken gate leads to a lovely garden, 0
+The dusty attic holds my happiest memories, 0
+The scratched guitar plays the sweetest tunes, 0
+The torn notebook contains so many good ideas, 0
+The clunky shoes made the walk so special, 0
+This wrinkled shirt brings back good times, 0
+The squeaky door welcomes me home, 0
+The bland soup somehow made me feel full, 0
+Her awkward smile lights up my day, 0
+The tiny balcony has the best view in the city, 0
+This old blanket keeps me so warm at night, 0
+The small room feels cozy and full of love, 0
+His funny but strange laugh makes me happy, 0
+The warm meal was served in a dirty dish, 1
+The colorful dress looked cheap up close, 1
+The calm lake had a horrible smell, 1
+The friendly voice sounded so fake, 1
+The cheerful music hurt my ears, 1
+The beautiful picture was ruined by stains, 1
+The soft bed made my back hurt, 1
+The big party left the house a mess, 1
+The tasty coffee burned my tongue, 1
+The cozy blanket was full of dust, 1
+The thoughtful gift was completely useless, 1
+The shiny shoes gave me blisters, 1
+The exciting trip was ruined by delays, 1
+The sweet fruit was overripe and mushy, 1
+The clear water was freezing cold, 1
+The bright light hurt my eyes, 1
+The colorful cake tasted awful, 1
+The smooth road had too many bumps, 1
+The peaceful park was full of trash, 1
+The nice hotel had terrible service, 1
