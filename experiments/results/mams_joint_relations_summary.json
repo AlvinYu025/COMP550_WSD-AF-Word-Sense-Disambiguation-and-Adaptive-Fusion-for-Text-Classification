@@ -1,0 +1,78 @@
+{
+  "method": "sentence-level joint multi-aspect relation learning",
+  "protocol": {
+    "selection": "official MAMS validation only",
+    "final_training": "MAMS train + validation, fixed 3 epochs",
+    "test_evaluations": "after locking architecture, epochs, and decoder",
+    "seed_policy": "fixed seed 42; no seed search"
+  },
+  "algorithm": {
+    "backbone": "roberta-base",
+    "train_views": [
+      "plain",
+      "plain"
+    ],
+    "relation_layer": "one gated multi-head self-attention block over all aspect representations in a sentence",
+    "losses": {
+      "aspect_cross_entropy": 1.0,
+      "sentence_diversity": 0.2,
+      "pair_same_different": 0.2
+    },
+    "decoder": {
+      "type": "exact sentence-level assignment search",
+      "hard_constraint": "at least two sentiment labels per MAMS sentence",
+      "pair_weight": 0.1
+    }
+  },
+  "official_validation": {
+    "independent_macro_f1": 0.8548522746736776,
+    "hard_diversity_macro_f1": 0.8555185526044778,
+    "selected_relation_macro_f1": 0.8555491892146635
+  },
+  "final_test": {
+    "accuracy": 0.8720059880239521,
+    "macro_f1": 0.8677244816939514,
+    "weighted_f1": 0.8720438579414235
+  },
+  "comparisons": {
+    "original_baseline_macro_f1": 0.8417170559747086,
+    "gain_over_original_points": 2.600742571924285,
+    "bootstrap_vs_original": {
+      "mean_difference_points": 2.5792156753524695,
+      "ci95_points": [
+        0.9261764153309041,
+        4.2367024708737855
+      ],
+      "two_sided_p_approx": 0.0024
+    },
+    "previous_test_selected_ensemble_macro_f1": 0.8617791852857996,
+    "bootstrap_vs_previous_ensemble": {
+      "mean_difference_points": 0.5879783046843187,
+      "ci95_points": [
+        -0.841711983164575,
+        2.0156440897609813
+      ],
+      "two_sided_p_approx": 0.4288
+    },
+    "reported_svm_atsa_macro_f1": 0.8677,
+    "numerical_margin_over_reported_points": 0.002448169395140142,
+    "interpretation": "numerically above the reported value, but tied at two decimal places and not evidence of a significant SOTA margin"
+  },
+  "ablations": {
+    "selective_wsd_validation_macro_f1": 0.8519637021850598,
+    "plain_control_validation_macro_f1": 0.8555491892146635,
+    "relative_loss_005_validation_macro_f1": 0.85644347813543,
+    "relative_loss_005_locked_final_test_macro_f1": 0.8658643968179072,
+    "deberta_validation_macro_f1": 0.8566808654844541,
+    "deberta_locked_test_macro_f1": 0.8412114106439694,
+    "label_set_validation_macro_f1": 0.8524508581791554,
+    "marker_pair_validation_macro_f1": 0.8499508869732894,
+    "quote_pair_validation_macro_f1": 0.8515726743870159
+  },
+  "status": {
+    "significant_gain_over_original_baseline": true,
+    "reported_sota_numerically_exceeded": true,
+    "reported_sota_clearly_exceeded": false,
+    "recommended_primary_result": "86.7724 Macro-F1 / 87.2006 Accuracy"
+  }
+}

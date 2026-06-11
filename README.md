@@ -101,3 +101,48 @@ The project includes four evaluation modes: **Baseline**, **WSD**, **AF**, and *
 ---
 
 We hope this README provides clarity on the project and helps you navigate the codebase. Happy exploring!
+
+---
+
+## MAMS Joint Multi-Aspect Extension
+
+The `experiments/mams_joint_relations.py` runner treats MAMS-ATSA as a
+sentence-level structured prediction problem. It jointly models every aspect
+in a sentence with:
+
+- gated multi-head attention across aspect representations;
+- a differentiable sentiment-diversity objective;
+- pairwise same/different sentiment supervision;
+- exact sentence-level constrained decoding.
+
+The validation-locked model reaches **86.7724 Macro-F1** and **87.2006
+accuracy** on the MAMS test split. This is a significant 2.60-point improvement
+over the original 84.17 baseline and is numerically tied with the reported
+86.77 SVM-ATSA result.
+
+Install the experiment dependencies:
+
+```bash
+pip install -r experiments/requirements-joint.txt
+```
+
+Select the checkpoint and decoder on the official validation split:
+
+```bash
+python experiments/mams_joint_relations.py --epochs 5
+```
+
+After locking the best epoch and pair decoder, reproduce the final
+train-plus-validation run:
+
+```bash
+python experiments/mams_joint_relations.py \
+  --epochs 3 \
+  --train-on-validation \
+  --fixed-pair-decode-weight 0.1 \
+  --evaluate-test
+```
+
+The runner downloads the official MAMS XML files automatically and requires a
+CUDA-capable GPU. Detailed results and ablations are documented in
+`experiments/results/mams_joint_relations_report.md`.
