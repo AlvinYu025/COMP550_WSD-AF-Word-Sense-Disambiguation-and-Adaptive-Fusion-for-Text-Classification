@@ -146,3 +146,26 @@ python experiments/mams_joint_relations.py \
 The runner downloads the official MAMS XML files automatically and requires a
 CUDA-capable GPU. Detailed results and ablations are documented in
 `experiments/results/mams_joint_relations_report.md`.
+
+---
+
+## Sense-Conditioned Relation Attention
+
+`experiments/mams_sense_relational.py` models every aspect in a sentence with
+relation attention and one sentiment cross-entropy objective. It also contains
+controlled WSD pair-bias and aspect-to-scope pooling ablations.
+
+The relation-only refit reaches **87.5784 test Macro-F1**. The WSD-conditioned
+and scope-pooling variants improve individual validation runs but do not
+survive train-plus-validation refitting, so they remain honest ablations rather
+than the recommended primary model.
+
+Cross-relative attention reaches 86.4116 validation Macro-F1, but its strongest
+matched refit reaches only 86.7764 on test. Residual-logit correction reaches
+85.6212 on validation and 86.2870 on test. Neither replaces the simpler
+relation-only model. These follow-ups are exploratory because earlier MAMS
+test results were already known.
+
+See `experiments/README.md` for setup, reproduction commands, and result
+tables. The detailed run report is in
+`experiments/results/mams_sense_relational_report.md`.

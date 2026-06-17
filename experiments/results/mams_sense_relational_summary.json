@@ -1,0 +1,150 @@
+{
+  "method": "sentence-level multi-aspect relation attention with WSD, scope, structural, and class-balance ablations",
+  "protocol": {
+    "selection": "official MAMS validation only",
+    "seed_policy": "fixed seed 42; no seed search",
+    "objective": "aspect sentiment cross-entropy only",
+    "test_policy": "each run was locked before its own test evaluation; later structural follow-ups are exploratory because earlier test results were already known",
+    "final_refit": "train + validation with validation-locked fixed epochs"
+  },
+  "coverage_v2": {
+    "aspects": 13854,
+    "wordnet_covered": 13357,
+    "ambiguous": 10701,
+    "glossbert_candidate_pairs": 62228,
+    "nonzero_confidence": 13356,
+    "mean_confidence": 0.826204240322113
+  },
+  "train_only_validation_macro_f1": {
+    "baseline": 0.8423003220888344,
+    "relation": 0.8506490785763446,
+    "wsd_raw_v2": 0.8601034431850142,
+    "wsd_orthogonal_v2": 0.8580232671135537,
+    "wsd_semantic_only_v2": 0.8542368652209614,
+    "scope_relation": 0.8578820048168775,
+    "scope_wsd_relation": 0.8564387579093443,
+    "relation_cross_only": 0.8514499537458816,
+    "relation_relative_rank_only": 0.8526244887226166,
+    "relation_cross_relative": 0.8641157201951764,
+    "relation_residual_logit": 0.8562116269449311,
+    "relation_residual_context": 0.8453752510990995,
+    "relation_residual_cross_relative": 0.8438332730889843,
+    "relation_class_balanced_sqrt": 0.8540294410972454,
+    "relation_roberta_large": 0.8463897884188656,
+    "relation_deberta_v3_base": 0.8536206397397562,
+    "relation_deberta_cross_relative": 0.8413072185498605
+  },
+  "train_validation_refit_test": {
+    "baseline": {
+      "epochs": 3,
+      "accuracy": 0.8525449101796407,
+      "macro_f1": 0.8491090422171395
+    },
+    "relation": {
+      "epochs": 2,
+      "accuracy": 0.8802395209580839,
+      "macro_f1": 0.875784003136855
+    },
+    "wsd_raw_v2": {
+      "epochs": 5,
+      "accuracy": 0.8652694610778443,
+      "macro_f1": 0.8618386629918772,
+      "difference_from_relation_points": -1.394534014497779,
+      "cluster_bootstrap_ci95_points": [
+        -2.5983,
+        -0.1659
+      ]
+    },
+    "wsd_orthogonal_v2": {
+      "epochs": 3,
+      "accuracy": 0.8712574850299402,
+      "macro_f1": 0.8671113020271229,
+      "difference_from_relation_points": -0.8672701109732135,
+      "cluster_bootstrap_ci95_points": [
+        -2.0334,
+        0.2811
+      ]
+    },
+    "wsd_semantic_only_v2": {
+      "epochs": 3,
+      "accuracy": 0.8607784431137725,
+      "macro_f1": 0.8563971316213469,
+      "difference_from_relation_points": -1.9386871515508108,
+      "cluster_bootstrap_ci95_points": [
+        -2.9787,
+        -0.9014
+      ]
+    },
+    "scope_relation": {
+      "epochs": 2,
+      "accuracy": 0.8645209580838323,
+      "macro_f1": 0.8591273187728881,
+      "difference_from_relation_points": -1.665668436396689,
+      "cluster_bootstrap_ci95_points": [
+        -2.9837,
+        -0.3638
+      ]
+    },
+    "relation_cross_relative": {
+      "validation_locked_epochs": 3,
+      "accuracy": 0.8660179640718563,
+      "macro_f1": 0.8611567454598491,
+      "difference_from_relation_points": -1.4627257677005847
+    },
+    "relation_cross_relative_update_matched": {
+      "updates": 2151,
+      "accuracy": 0.8727544910179641,
+      "macro_f1": 0.8677643501275956,
+      "difference_from_relation_points": -0.8019653009259369,
+      "cluster_bootstrap_ci95_points": [
+        -2.0115,
+        0.3881
+      ]
+    },
+    "relation_residual_logit": {
+      "epochs": 2,
+      "accuracy": 0.8675149700598802,
+      "macro_f1": 0.8628697026432689,
+      "difference_from_relation_points": -1.291430049358612,
+      "cluster_bootstrap_ci95_points": [
+        -2.4348,
+        -0.1716
+      ]
+    }
+  },
+  "structural_follow_up": {
+    "cross_relative_validation_difference_points": 1.346664161883182,
+    "cross_relative_validation_cluster_bootstrap_ci95_points": [
+      0.0045,
+      2.6743
+    ],
+    "residual_logit_validation_difference_points": 0.5562548368586449,
+    "residual_logit_validation_cluster_bootstrap_ci95_points": [
+      -0.7763,
+      1.9151
+    ],
+    "conclusion": "Neither validation improvement survived the locked train-plus-validation refit."
+  },
+  "interpretation": {
+    "relation_forward_validated": true,
+    "singleton_wsd_bug_fixed": true,
+    "sense_identity_has_weak_validation_signal": true,
+    "wsd_stable_after_train_validation_refit": false,
+    "scope_pooling_stable_after_train_validation_refit": false,
+    "cross_relative_stable_after_train_validation_refit": false,
+    "residual_logit_stable_after_train_validation_refit": false,
+    "larger_or_alternative_backbone_improved_validation": false,
+    "class_balancing_materially_improved_validation": false,
+    "recommended_model": "relation-only",
+    "recommended_test_macro_f1": 0.875784003136855,
+    "previous_repository_best_macro_f1": 0.8677244816939514,
+    "numerical_gain_over_previous_repository_best_points": 0.8059521442903623
+  },
+  "literature_checked_on": "2026-06-14",
+  "literature": {
+    "svm_atsa_mams_macro_f1": 0.8677,
+    "svm_atsa_url": "https://aclanthology.org/2024.findings-emnlp.340/",
+    "ghi_mams_macro_f1": 0.8442,
+    "ghi_url": "https://arxiv.org/abs/2605.22228"
+  }
+}
